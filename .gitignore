@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Neovim runtime junk
+.netrwhist
+
+# Local spell files (machine-specific)
+spell/*.add.spl
+spell/*.spl
