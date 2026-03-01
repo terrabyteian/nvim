@@ -5,7 +5,7 @@ Personal Neovim 0.11 config. IDE feel for Python, Go, Rust, Terraform.
 ## Install (one command)
 
 ```sh
-bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/terrabyteian/nvim/main/install.sh)
 ```
 
 Then open `nvim` and wait for plugins to finish installing.

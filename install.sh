@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/YOUR_USERNAME/YOUR_REPO"
+REPO_URL="https://github.com/terrabyteian/nvim"
 NVIM_CONFIG="$HOME/.config/nvim"
 MIN_NVIM_MINOR=11   # require 0.11+
 
