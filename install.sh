@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================
-# install.sh — one-shot setup for ian's nvim config
+# install.sh — one-shot setup for terrabyteian/nvim
 #
 # Usage (on a fresh machine):
-#   bash <(curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/terrabyteian/nvim/main/install.sh)
 #
 # What this does:
-#   1. Installs Neovim 0.11+, ripgrep, fd, Node.js, JetBrainsMono Nerd Font
+#   1. Installs Neovim 0.11+, ripgrep, fd, Node.js, tree-sitter CLI,
+#      git, unzip, JetBrainsMono Nerd Font
 #   2. Backs up any existing ~/.config/nvim
 #   3. Clones this repo to ~/.config/nvim
 #   4. Prints next steps
@@ -24,9 +25,6 @@ log()  { echo -e "${B}=>${N} $1"; }
 ok()   { echo -e "${G}✓${N}  $1"; }
 warn() { echo -e "${Y}⚠${N}  $1"; }
 die()  { echo -e "${R}✗${N}  $1"; exit 1; }
-
-# ── Helpers ───────────────────────────────────────────────────
-need_cmd() { command -v "$1" &>/dev/null || die "Required command not found: $1"; }
 
 nvim_is_new_enough() {
   command -v nvim &>/dev/null || return 1
@@ -49,10 +47,13 @@ install_macos() {
   fi
 
   log "Installing packages via Homebrew..."
+  # git and unzip are provided by macOS/Xcode tools; no brew formula needed
   brew install neovim ripgrep fd node
   ok "neovim, ripgrep, fd, node installed"
 
-  log "Installing tree-sitter CLI (required for treesitter parser compilation)..."
+  log "Installing tree-sitter CLI..."
+  # nvim-treesitter v1.0 requires 'tree-sitter build' to compile parsers.
+  # 'brew install tree-sitter' is only the C library, not the CLI binary.
   npm install -g tree-sitter-cli
   ok "tree-sitter CLI installed"
 
@@ -75,9 +76,10 @@ install_linux() {
   fi
 
   install_nvim_linux
-  install_tools_linux
-  install_node_linux
-  install_font_linux
+  install_tools_linux   # ripgrep, fd, git, unzip
+  install_node_linux    # node.js
+  install_treesitter_cli_linux  # tree-sitter CLI (needs node)
+  install_font_linux    # JetBrainsMono Nerd Font
 }
 
 install_nvim_linux() {
@@ -108,11 +110,11 @@ install_nvim_linux() {
 }
 
 install_tools_linux() {
-  log "Installing ripgrep and fd..."
+  log "Installing ripgrep, fd, git, unzip..."
 
   if command -v apt &>/dev/null; then
     sudo apt update -qq
-    sudo apt install -y ripgrep fd-find
+    sudo apt install -y ripgrep fd-find git unzip
     # Debian/Ubuntu installs fd as 'fdfind' — symlink to 'fd'
     if ! command -v fd &>/dev/null && command -v fdfind &>/dev/null; then
       mkdir -p "$HOME/.local/bin"
@@ -120,13 +122,13 @@ install_tools_linux() {
     fi
 
   elif command -v dnf &>/dev/null; then
-    sudo dnf install -y ripgrep fd-find
+    sudo dnf install -y ripgrep fd git unzip
 
   elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm ripgrep fd
+    sudo pacman -S --noconfirm ripgrep fd git unzip
 
   elif command -v zypper &>/dev/null; then
-    sudo zypper install -y ripgrep fd
+    sudo zypper install -y ripgrep fd git unzip
 
   else
     warn "Unknown package manager — installing ripgrep + fd from GitHub releases..."
@@ -151,9 +153,13 @@ install_tools_linux() {
     cp "$tmp"/fd-*/fd "$HOME/.local/bin/"
 
     rm -rf "$tmp"
+
+    # git and unzip are typically available; warn if not
+    command -v git   &>/dev/null || warn "git not found — install it manually"
+    command -v unzip &>/dev/null || warn "unzip not found — install it manually"
   fi
 
-  ok "ripgrep and fd installed"
+  ok "ripgrep, fd, git, unzip ready"
 }
 
 install_node_linux() {
@@ -173,13 +179,24 @@ install_node_linux() {
     sudo pacman -S --noconfirm nodejs npm
   else
     warn "Could not install Node.js automatically."
-    warn "Install it manually (https://nodejs.org) — needed for pyright (Python LSP)."
+    warn "Install it manually from https://nodejs.org — required for pyright (Python LSP)"
+    warn "and tree-sitter CLI (treesitter parser compilation)."
     return
   fi
 
   ok "Node.js $(node --version) installed"
+}
 
-  log "Installing tree-sitter CLI (required for treesitter parser compilation)..."
+install_treesitter_cli_linux() {
+  # Runs after install_node_linux — node must be available.
+  # nvim-treesitter v1.0 requires 'tree-sitter build' to compile parsers.
+  if ! command -v node &>/dev/null; then
+    warn "Node.js not available — skipping tree-sitter CLI install."
+    warn "Install node then run: npm install -g tree-sitter-cli"
+    return
+  fi
+
+  log "Installing tree-sitter CLI..."
   npm install -g tree-sitter-cli
   ok "tree-sitter CLI installed"
 }
@@ -194,7 +211,6 @@ install_font_linux() {
   curl -fsSL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" \
     -o "$tmp/JetBrainsMono.zip"
 
-  need_cmd unzip
   unzip -qo "$tmp/JetBrainsMono.zip" -d "$font_dir"
   rm -rf "$tmp"
 
@@ -213,6 +229,8 @@ clone_config() {
     ok "Config already present at $NVIM_CONFIG"
     return
   fi
+
+  command -v git &>/dev/null || die "git is required but not installed"
 
   # Back up existing non-git config
   if [ -e "$NVIM_CONFIG" ]; then
@@ -249,8 +267,8 @@ main() {
   echo ""
   echo "  1. Set your terminal font to 'JetBrainsMono Nerd Font Mono'"
   echo "  2. Open nvim — plugins + treesitter parsers install automatically"
-  echo "     (first launch will take ~60s to compile parsers, subsequent launches are instant)"
-  echo "  3. Inside nvim, run:  :Mason      (watch LSP installs)"
+  echo "     (first launch takes ~60s to compile parsers; subsequent launches are instant)"
+  echo "  3. Inside nvim, run:  :Mason      (watch LSP installs finish)"
   echo "  4. Inside nvim, run:  :checkhealth"
   echo ""
   echo "  Keybindings reference:  <leader>?  (Space + ?)"
