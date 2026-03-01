@@ -8,23 +8,32 @@
 --   • indent     → nvim-treesitter.indent.get_indent()
 --   • parsers    → require("nvim-treesitter.install").install()
 --   • lazy = false: plugin explicitly does not support lazy-loading
+--   • compilation requires `tree-sitter` CLI (npm install -g tree-sitter-cli)
+--
+-- IMPORTANT: install() lives in `build`, not `config`.
+--   build  → runs once after plugin install/update (never on every launch)
+--   config → runs on every nvim startup (only sets up FileType autocmd here)
 -- ============================================================
+
+local parsers = {
+  "lua", "vim", "vimdoc",
+  "python", "go", "rust", "hcl", "terraform",
+  "json", "yaml", "toml", "markdown", "markdown_inline",
+  "bash", "regex", "diff",
+}
 
 return {
   "nvim-treesitter/nvim-treesitter",
-  build = ":TSUpdate",
   lazy = false, -- v1.0 does not support lazy-loading
-  config = function()
-    -- ── Install parsers we use ────────────────────────────────
-    local parsers = {
-      "lua", "vim", "vimdoc",
-      "python", "go", "rust", "hcl", "terraform",
-      "json", "yaml", "toml", "markdown", "markdown_inline",
-      "bash", "regex", "diff",
-    }
-    require("nvim-treesitter.install").install(parsers, { summary = false })
 
-    -- ── Enable highlight + indent per filetype ────────────────
+  -- Runs ONLY after plugin install or update, never on regular startup.
+  -- Requires tree-sitter CLI: npm install -g tree-sitter-cli
+  build = function()
+    require("nvim-treesitter.install").install(parsers)
+  end,
+
+  config = function()
+    -- ── Enable highlight + indent per filetype ──────────────
     vim.api.nvim_create_autocmd("FileType", {
       group = vim.api.nvim_create_augroup("Treesitter", { clear = true }),
       callback = function(args)

@@ -52,6 +52,10 @@ install_macos() {
   brew install neovim ripgrep fd node
   ok "neovim, ripgrep, fd, node installed"
 
+  log "Installing tree-sitter CLI (required for treesitter parser compilation)..."
+  npm install -g tree-sitter-cli
+  ok "tree-sitter CLI installed"
+
   log "Installing JetBrainsMono Nerd Font..."
   brew install --cask font-jetbrains-mono-nerd-font
   ok "JetBrainsMono Nerd Font installed"
@@ -174,6 +178,10 @@ install_node_linux() {
   fi
 
   ok "Node.js $(node --version) installed"
+
+  log "Installing tree-sitter CLI (required for treesitter parser compilation)..."
+  npm install -g tree-sitter-cli
+  ok "tree-sitter CLI installed"
 }
 
 install_font_linux() {
@@ -240,10 +248,10 @@ main() {
   echo -e "${G}All done!${N} Next steps:"
   echo ""
   echo "  1. Set your terminal font to 'JetBrainsMono Nerd Font Mono'"
-  echo "  2. Open nvim — plugins install automatically on first launch"
-  echo "  3. Inside nvim, run:  :TSUpdate   (build treesitter parsers)"
-  echo "  4. Inside nvim, run:  :Mason      (watch LSP installs)"
-  echo "  5. Inside nvim, run:  :checkhealth"
+  echo "  2. Open nvim — plugins + treesitter parsers install automatically"
+  echo "     (first launch will take ~60s to compile parsers, subsequent launches are instant)"
+  echo "  3. Inside nvim, run:  :Mason      (watch LSP installs)"
+  echo "  4. Inside nvim, run:  :checkhealth"
   echo ""
   echo "  Keybindings reference:  <leader>?  (Space + ?)"
   echo ""
