@@ -48,7 +48,7 @@ install_macos() {
 
   log "Installing packages via Homebrew..."
   # git and unzip are provided by macOS/Xcode tools; no brew formula needed
-  brew install neovim ripgrep fd node
+  brew install neovim ripgrep fd node go
   ok "neovim, ripgrep, fd, node installed"
 
   log "Installing tree-sitter CLI..."
@@ -69,15 +69,20 @@ install_macos() {
 
 # ── Linux ─────────────────────────────────────────────────────
 install_linux() {
-  log "Linux detected ($(uname -m))"
+  local arch
+  arch=$(uname -m)
+  log "Linux detected ($arch)"
 
-  if [ "$(uname -m)" != "x86_64" ]; then
-    die "This script only supports x86_64 Linux. Detected: $(uname -m)"
-  fi
+  case "$arch" in
+    x86_64|aarch64) ;;
+    *) die "Unsupported architecture: $arch (supported: x86_64, aarch64)" ;;
+  esac
 
   install_nvim_linux
   install_tools_linux   # ripgrep, fd, git, unzip
   install_node_linux    # node.js
+  install_go_linux      # Go (required for gopls)
+  install_python_linux  # Python3 + pip3 (required for ruff)
   install_treesitter_cli_linux  # tree-sitter CLI (needs node)
   install_font_linux    # JetBrainsMono Nerd Font
 }
@@ -88,10 +93,16 @@ install_nvim_linux() {
     return
   fi
 
+  local tarball
+  case "$(uname -m)" in
+    x86_64)  tarball="nvim-linux-x86_64.tar.gz" ;;
+    aarch64) tarball="nvim-linux-arm64.tar.gz"   ;;
+  esac
+
   log "Installing Neovim (latest stable) from GitHub releases..."
   local tmp
   tmp=$(mktemp -d)
-  curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" \
+  curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${tarball}" \
     -o "$tmp/nvim.tar.gz"
 
   mkdir -p "$HOME/.local"
@@ -132,15 +143,20 @@ install_tools_linux() {
 
   else
     warn "Unknown package manager — installing ripgrep + fd from GitHub releases..."
-    local tmp
+    local tmp musl_arch
     tmp=$(mktemp -d)
     mkdir -p "$HOME/.local/bin"
+
+    case "$(uname -m)" in
+      x86_64)  musl_arch="x86_64-unknown-linux-musl"  ;;
+      aarch64) musl_arch="aarch64-unknown-linux-musl" ;;
+    esac
 
     # ripgrep
     local rg_ver
     rg_ver=$(curl -fsSL https://api.github.com/repos/BurntSushi/ripgrep/releases/latest \
       | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-    curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-${rg_ver}-x86_64-unknown-linux-musl.tar.gz" \
+    curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-${rg_ver}-${musl_arch}.tar.gz" \
       | tar -C "$tmp" -xz
     cp "$tmp"/ripgrep-*/rg "$HOME/.local/bin/"
 
@@ -148,7 +164,7 @@ install_tools_linux() {
     local fd_ver
     fd_ver=$(curl -fsSL https://api.github.com/repos/sharkdp/fd/releases/latest \
       | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-    curl -fsSL "https://github.com/sharkdp/fd/releases/latest/download/fd-${fd_ver}-x86_64-unknown-linux-musl.tar.gz" \
+    curl -fsSL "https://github.com/sharkdp/fd/releases/latest/download/fd-${fd_ver}-${musl_arch}.tar.gz" \
       | tar -C "$tmp" -xz
     cp "$tmp"/fd-*/fd "$HOME/.local/bin/"
 
@@ -185,6 +201,67 @@ install_node_linux() {
   fi
 
   ok "Node.js $(node --version) installed"
+}
+
+install_go_linux() {
+  if command -v go &>/dev/null; then
+    ok "Go $(go version | awk '{print $3}') already installed"
+    return
+  fi
+
+  # Distro packages (e.g. Debian's golang-go) are often too old for current
+  # gopls. Always download the latest stable release from golang.org instead.
+  log "Installing Go (latest stable) from golang.org..."
+
+  local go_arch
+  case "$(uname -m)" in
+    x86_64)  go_arch="amd64" ;;
+    aarch64) go_arch="arm64" ;;
+  esac
+
+  local go_ver
+  go_ver=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -1)
+
+  local tmp
+  tmp=$(mktemp -d)
+  curl -fsSL "https://go.dev/dl/${go_ver}.linux-${go_arch}.tar.gz" -o "$tmp/go.tar.gz"
+  sudo tar -C /usr/local -xzf "$tmp/go.tar.gz"
+  rm -rf "$tmp"
+
+  export PATH="/usr/local/go/bin:$PATH"
+
+  # Persist for future shell sessions
+  local rc="$HOME/.bashrc"
+  if ! grep -q '/usr/local/go/bin' "$rc" 2>/dev/null; then
+    echo 'export PATH="/usr/local/go/bin:$PATH"' >> "$rc"
+  fi
+
+  ok "Go $(go version | awk '{print $3}') installed to /usr/local/go"
+}
+
+install_python_linux() {
+  if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
+    ok "Python3/pip already installed"
+    return
+  fi
+
+  log "Installing Python3/pip3..."
+
+  if command -v apt &>/dev/null; then
+    sudo apt install -y python3 python3-pip python3-venv
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y python3 python3-pip
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm python python-pip
+  elif command -v zypper &>/dev/null; then
+    sudo zypper install -y python3 python3-pip
+  else
+    warn "Could not install Python3/pip automatically."
+    warn "Install it manually — required for ruff (Python formatter)"
+    return
+  fi
+
+  ok "Python3/pip3 installed"
 }
 
 install_treesitter_cli_linux() {

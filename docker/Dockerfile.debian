@@ -1,0 +1,45 @@
+# ── Debian 12 (Bookworm) test image for terrabyteian/nvim ────────
+#
+# Build (from repo root):
+#   docker build -f docker/Dockerfile.debian -t nvim-test-debian .
+#
+# Shell into it:
+#   docker run --rm -it nvim-test-debian
+#
+# What this does:
+#   1. Copies install.sh from the local repo (tests current version on disk)
+#   2. Runs the full install as root (sudo calls succeed silently as root)
+#   3. Pre-installs lazy.nvim plugins headlessly so first `nvim` is instant
+# ─────────────────────────────────────────────────────────────────
+
+FROM debian:12
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TERM=xterm-256color \
+    COLORTERM=truecolor \
+    LANG=C.UTF-8 \
+    # nvim + tree-sitter land here on Linux; Go installs to /usr/local/go
+    PATH="/usr/local/go/bin:/root/.local/bin:$PATH"
+
+# Minimal bootstrap — install.sh handles everything else
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+        curl git sudo ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the local install.sh so we test the version on disk, not the GitHub copy
+COPY install.sh /tmp/install.sh
+
+# Full install (packages → clone config)
+RUN bash /tmp/install.sh
+
+# 1. Install plugins + compile treesitter parsers (build hooks fire here)
+RUN nvim --headless "+Lazy! sync" "+qa" 2>&1 | cat || true
+
+# 2. Install Mason tools (LSP servers + formatters).
+#    MasonToolsInstall triggers all ensure_installed items; the autocmd waits
+#    for completion before quitting so installs aren't cut short.
+RUN timeout 300 nvim --headless \
+      -c "autocmd User MasonToolsUpdateCompleted qall" \
+      -c "MasonToolsInstall" 2>&1 | cat || true
+
+CMD ["/bin/bash"]
