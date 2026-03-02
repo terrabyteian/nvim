@@ -125,7 +125,7 @@ install_tools_linux() {
 
   if command -v apt &>/dev/null; then
     sudo apt update -qq
-    sudo apt install -y ripgrep fd-find git unzip
+    sudo apt install -y ripgrep fd-find git unzip build-essential
     # Debian/Ubuntu installs fd as 'fdfind' — symlink to 'fd'
     if ! command -v fd &>/dev/null && command -v fdfind &>/dev/null; then
       mkdir -p "$HOME/.local/bin"
@@ -133,13 +133,13 @@ install_tools_linux() {
     fi
 
   elif command -v dnf &>/dev/null; then
-    sudo dnf install -y ripgrep fd git unzip
+    sudo dnf install -y ripgrep fd git unzip gcc make
 
   elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm ripgrep fd git unzip
+    sudo pacman -S --noconfirm ripgrep fd git unzip base-devel
 
   elif command -v zypper &>/dev/null; then
-    sudo zypper install -y ripgrep fd git unzip
+    sudo zypper install -y ripgrep fd git unzip gcc make
 
   else
     warn "Unknown package manager — installing ripgrep + fd from GitHub releases..."
@@ -275,7 +275,19 @@ install_treesitter_cli_linux() {
 
   log "Installing tree-sitter CLI..."
   npm install -g tree-sitter-cli
-  ok "tree-sitter CLI installed"
+
+  # The latest npm binary is dynamically linked against GLIBC 2.39.
+  # Debian 12 and other older distros ship GLIBC 2.36; the binary crashes.
+  # Fall back to the last version whose binary was built against an older GLIBC.
+  if ! tree-sitter --version &>/dev/null 2>&1; then
+    warn "Latest tree-sitter binary requires a newer GLIBC than this system provides."
+    warn "Installing tree-sitter-cli@0.22.6 (last version compatible with older GLIBC)..."
+    npm install -g tree-sitter-cli@0.22.6
+    tree-sitter --version &>/dev/null 2>&1 || \
+      die "Could not install a working tree-sitter CLI. Install manually."
+  fi
+
+  ok "tree-sitter CLI installed ($(tree-sitter --version))"
 }
 
 install_font_linux() {

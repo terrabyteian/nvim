@@ -32,8 +32,17 @@ COPY install.sh /tmp/install.sh
 # Full install (packages → clone config)
 RUN bash /tmp/install.sh
 
-# 1. Install plugins + compile treesitter parsers (build hooks fire here)
+# 1. Install plugins (build hooks fire here, but parser compilation is async)
 RUN nvim --headless "+Lazy! sync" "+qa" 2>&1 | cat || true
+
+# 1b. Explicitly compile all treesitter parsers.
+#     The Lazy build hook above is async; +qa can fire before slow parsers finish
+#     (observed: vim parser misses the cut on arm64/Debian). Running install()
+#     directly and letting the event loop spin (timeout kills nvim when done)
+#     guarantees every parser is present before the next layer.
+RUN timeout 120 nvim --headless \
+      -c "lua require('nvim-treesitter.install').install({'lua','vim','vimdoc','python','go','rust','hcl','terraform','json','yaml','toml','markdown','markdown_inline','bash','regex','diff'})" \
+      2>&1 | cat; true
 
 # 2. Install Mason tools (LSP servers + formatters).
 #    MasonToolsInstall triggers all ensure_installed items; the autocmd waits
